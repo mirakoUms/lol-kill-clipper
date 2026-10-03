@@ -1,9 +1,9 @@
 """One-match local publishing workflow; no GUI framework or extra dependencies."""
-import csv
 import hashlib
 import json
 import math
 import os
+import re
 import tempfile
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -53,7 +53,7 @@ def load_settings() -> dict:
     for key in ('client_dir', 'output_dir'):
         if not isinstance(settings.get(key), str) or not settings[key]:
             raise ValueError(f'workflow.yaml: {key} 必须是路径')
-    for key in ('combine', 'open_folder'):
+    for key in ('open_folder',):
         if not isinstance(settings.get(key), bool):
             raise ValueError(f'workflow.yaml: {key} 必须是 true 或 false')
     return settings
@@ -159,77 +159,74 @@ def clip_name(index: int, clip: dict, events: list[dict]) -> str:
     return f'{index:03}_{label}_{game_time}.mp4'
 
 
+def champion_slug(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9 .'-]*", value.strip()):
+        raise ValueError('请输入英雄英文名，例如 Aatrox 或 Miss Fortune')
+    return re.sub(r"[^A-Za-z0-9]", '', value.strip())
+
+
+def match_champion(client: Client, detail: dict, participant: int) -> str:
+    players = detail.get('participants', detail.get('info', {}).get('participants', []))
+    player = next((p for p in players if p.get('participantId') == participant), {})
+    champion_id = player.get('championId')
+    champions = client.get('/lol-game-data/assets/v1/champion-summary.json')
+    champion = next((c for c in champions if c.get('id') == champion_id), {})
+    alias = champion.get('alias')
+    if not alias and champion_id:
+        alias = client.get(f'/lol-game-data/assets/v1/champions/{champion_id}.json').get('alias')
+    if not alias:
+        raise ValueError('客户端缺少英雄英文名，请使用 --champion Aatrox 指定')
+    return champion_slug(alias)
+
+
 def export_package(video: Path, event_file: Path, offset: float, config: dict,
-                   root: Path, mode: str, combine: bool, match_id: int | None) -> Path:
+                   root: Path, mode: str, combine: bool, match_id: int | None,
+                   champion: str) -> Path:
+    champion = champion_slug(champion)
     executable = check_ffmpeg()
     cap, info = open_video(video)
     cap.release()
-    # Events before/after this recording are expected for a partial recording.
-    # Filter them explicitly and report counts; never silently omit them.
     data = json.loads(event_file.read_text(encoding='utf-8-sig'))
     if data.get('selection') != 'all':
-        raise ValueError('一键导出需要全部击杀/死亡/助攻数据（selection: all）；请重新读取 --kind all')
-    selected, outside = [], 0
+        raise ValueError('需要全部击杀/死亡/助攻数据（selection: all）；请重新读取 --kind all')
+    selected, outside = [], []
     for item in data.get('events', []):
         value = item.get('game_time')
         if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or value < 0:
             raise ValueError('事件文件包含非法游戏时间')
-        if 0 <= value+offset < info.duration:
-            selected.append(item)
-        else:
-            outside += 1
+        (selected if 0 <= value+offset < info.duration else outside).append(item)
     if outside:
-        print(f'有 {outside} 个事件发生在录像覆盖范围之外，无法剪出，已列入清单。请核对录制开始时间。')
+        print(f'有 {len(outside)} 个事件在录像范围之外，请核对录制开始时间。')
     if not selected:
-        raise ValueError('录像时间范围内没有击杀/死亡/助攻事件，请检查对局和录制起始时间')
-    output = unique_output(root, f'{video.stem}_对局{match_id or "offline"}')
-    setup_logging(output/'logs')
-    selected_file = output/'events.json'
-    write_json(selected_file,{**data,'events':selected})
-    events = import_events(selected_file,offset,info.duration)
-    clips = []
-    for index,event in enumerate(events):
-        clip = merge_clips([event],info.duration,config['pre_kill_seconds'],config['post_kill_seconds'],
-                           0,config['event_windows'])[0]
-        clip['event_indices'] = [index]
-        clips.append(clip)
-    names = [clip_name(i,clip,events) for i,clip in enumerate(clips,1)]
-    print(f'\n录像内共 {sum(e["kind"]=="kill" for e in events)} 次击杀、{sum(e["kind"]=="death" for e in events)} 次死亡、{sum(e["kind"]=="assist" for e in events)} 次助攻。')
-    print(f'开始导出全部 {len(clips)} 个独立切片…')
-    exports = cut_clips(video,output,clips,mode,executable,names=names)
-    merged = merge_clips(events,info.duration,config['pre_kill_seconds'],config['post_kill_seconds'],
-                         config['merge_gap'],config['event_windows'])
-    if combine:
-        if merged == clips:
-            combine_clips(exports,output/'全部事件合集.mp4',executable)
-        else:
-            # Temporary merged material only serves the montage; keep every
-            # independent event clip for editing and avoid repeated footage.
-            with tempfile.TemporaryDirectory(prefix='.montage_',dir=output) as temporary_dir:
-                temporary_root = Path(temporary_dir).resolve()
-                if not temporary_root.is_relative_to(output.resolve()):
-                    raise ValueError('Temporary montage directory outside export folder')
-                montage_exports = cut_clips(video,temporary_root,merged,mode,executable)
-                combine_clips(montage_exports,temporary_root/'all_events.mp4',executable)
-                (temporary_root/'all_events.mp4').replace(output/'全部事件合集.mp4')
-    rows = []
-    for i, clip in enumerate(exports,1):
-        rows.append({'序号':i,'文件':Path(clip['path']).name,
-                     '事件':'、'.join(f'{LABELS[events[n]["kind"]]} {timestamp(events[n]["game_time"])}' for n in clip['event_indices']),
-                     '录像开始':timestamp(clip['start']),'录像结束':timestamp(clip['end']),
-                     '时长秒':round(clip['end']-clip['start'],3)})
-    with (output/'片段清单.csv').open('w',encoding='utf-8-sig',newline='') as stream:
-        writer = csv.DictWriter(stream,fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-    write_json(output/'export.json',{'source':source_key(video),'match_id':match_id,'time_offset':offset,
-               'event_windows':config['event_windows'],'events':events,'skipped_events':[e for e in data['events'] if e not in selected],
-               'clips':[{**clip,'path':Path(clip['path']).name} for clip in exports],
-               'montage_ranges':merged,
-               'combined':'全部事件合集.mp4' if combine else None,'status':'complete'})
-    print(f'\n完成：{len(exports)} 个独立切片' + (' + 1 个合集' if combine else ''))
-    print(f'输出文件夹：{output}')
-    return output
+        raise ValueError('录像范围内没有击杀/死亡/助攻事件，请检查对局和录制起始时间')
+    root.mkdir(parents=True, exist_ok=True)
+    # Japan time, export date rather than match date; microseconds avoid collisions.
+    name = datetime.now(timezone(timedelta(hours=9))).strftime('%Y-%m-%d_%H-%M-%S_%f') + f'_{champion}.mp4'
+    destination = root/name
+    if destination.exists():
+        raise ValueError('输出文件重名，请重新导出')
+    log_root = PROJECT/'cache'/'export_logs'/destination.stem
+    setup_logging(log_root)
+    with tempfile.TemporaryDirectory(prefix='.montage_', dir=root) as temporary_dir:
+        temporary_root = Path(temporary_dir).resolve()
+        if not temporary_root.is_relative_to(root.resolve()):
+            raise ValueError('Temporary montage directory outside export folder')
+        selected_file = temporary_root/'events.json'
+        write_json(selected_file, {**data, 'events':selected})
+        events = import_events(selected_file, offset, info.duration)
+        merged = merge_clips(events,info.duration,config['pre_kill_seconds'],config['post_kill_seconds'],
+                             config['merge_gap'],config['event_windows'])
+        print('\n' + '、'.join(f'{sum(e["kind"]==k for e in events)} 次{label}' for k,label in LABELS.items()))
+        print(f'开始生成合集（{len(merged)} 段战斗画面）…')
+        exports = cut_clips(video,temporary_root,merged,mode,executable)
+        combined = temporary_root/'montage.mp4'
+        combine_clips(exports,combined,executable)
+        combined.replace(destination)
+    write_json(log_root/'export.json', {'source':source_key(video),'match_id':match_id,
+        'champion':champion,'time_offset':offset,'events':events,'skipped_events':outside,
+        'montage_ranges':merged,'combined':str(destination),'status':'complete'})
+    print(f'\n完成：{destination}')
+    return destination
 
 
 def run_workflow(args) -> int:
@@ -268,19 +265,36 @@ def run_workflow(args) -> int:
                 raise ValueError('对局 ID 必须是正整数')
             detail = client.get(f'/lol-match-history/v1/games/{match_id}')
             participant = own_participant(detail,summoner)
+            champion = getattr(args, 'champion', None)
+            if not champion:
+                try:
+                    champion = match_champion(client, detail, participant)
+                except (ValueError, OSError):
+                    champion = None
             timeline = client.get(f'/lol-match-history/v1/game-timelines/{match_id}')
             events = extract_events(timeline,participant,'all')
             event_file = PROJECT/'cache'/'workflow'/f'{digest}_{match_id}_events.json'
             write_json(event_file,{'schema':'lol-clipper-events-v1','match_id':match_id,
-                                  'participant_id':participant,'selection':'all','events':events})
+                                  'participant_id':participant,'champion':champion,'selection':'all','events':events})
         offset = recording_offset(args)
+    data = {} if getattr(args, 'champion', None) else json.loads(event_file.read_text(encoding='utf-8-sig'))
+    champion = getattr(args, 'champion', None) or data.get('champion') or (old or {}).get('champion')
+    if not champion:
+        try:
+            client = Client(find_lockfile(args.client_dir or Path(settings['client_dir'])))
+            detail = client.get(f'/lol-match-history/v1/games/{match_id}')
+            participant = data.get('participant_id') or own_participant(detail, client.get('/lol-summoner/v1/current-summoner'))
+            champion = match_champion(client, detail, participant)
+        except (ValueError, OSError):
+            champion = input('请输入本局英雄英文名（例如 Aatrox）：').strip()
+    champion = champion_slug(champion)
     root = args.output.resolve() if args.output else (PROJECT/settings['output_dir']).resolve()
-    output = export_package(video,event_file,offset,config,root,settings['cut_mode'],settings['combine'],match_id)
+    output = export_package(video,event_file,offset,config,root,settings['cut_mode'],True,match_id,champion)
     # Remember only a successfully exported choice, never a failed alignment.
-    write_json(job_file,{'source':key,'events_file':str(event_file.resolve()),'offset':offset,'match_id':match_id})
+    write_json(job_file,{'source':key,'events_file':str(event_file.resolve()),'offset':offset,'match_id':match_id,'champion':champion})
     if settings['open_folder'] and not args.no_open and os.name == 'nt':
         try:
-            os.startfile(str(output))
+            os.startfile(str(output.parent))
         except OSError:
             print('无法自动打开文件夹，可复制上面的输出路径打开。')
     return 0
