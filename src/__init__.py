@@ -1,0 +1,1 @@
+"""Local LoL highlight extraction."""
