@@ -46,7 +46,7 @@ def test_clip_name_order_and_kind():
     assert clip_name(2,{'event_indices':[1]},events).startswith('002_死亡1_')
 
 
-def test_package_keeps_all_individual_events_and_merges_montage(tmp_path):
+def test_package_keeps_only_montage_and_merges_events(tmp_path):
     video=tmp_path/'录像 空格.mp4'
     video.write_bytes(b'unit test placeholder')
     event_file=tmp_path/'input.json'
@@ -69,17 +69,16 @@ def test_package_keeps_all_individual_events_and_merges_montage(tmp_path):
          patch('src.workflow.open_video',return_value=(SimpleNamespace(release=lambda:None),SimpleNamespace(duration=150))), \
          patch('src.workflow.cut_clips',side_effect=fake_cut), \
          patch('src.workflow.combine_clips',side_effect=fake_combine):
-        output=export_package(video,event_file,0,config,tmp_path/'exports','accurate',True,1)
-    manifest=json.loads((output/'export.json').read_text(encoding='utf-8'))
-    assert len(manifest['clips'])==2
-    assert '助攻' in manifest['clips'][1]['path']
-    assert manifest['clips'][1]['start']==45
+        output=export_package(video,event_file,0,config,tmp_path/'exports','accurate',True,1,'Aatrox')
+    from src.workflow import PROJECT
+    manifest=json.loads((PROJECT/'cache'/'export_logs'/output.stem/'export.json').read_text(encoding='utf-8'))
     assert len(manifest['skipped_events'])==1
-    assert len(calls[0])==2 and len(calls[1])==1
+    assert len(calls)==1 and len(calls[0])==1
     assert len(manifest['montage_ranges'])==1
-    assert (output/'全部事件合集.mp4').is_file()
-    assert (output/'片段清单.csv').read_bytes().startswith(b'\xef\xbb\xbf')
-    assert not list(output.glob('.montage_*'))
+    assert output.name.endswith('_Aatrox.mp4')
+    assert output.read_bytes()==b'fake combined unit test output'
+    assert list((tmp_path/'exports').iterdir())==[output]
+    assert manifest['champion']=='Aatrox'
 
 
 def test_wizard_reuses_successful_choice_without_client(tmp_path):
@@ -88,7 +87,7 @@ def test_wizard_reuses_successful_choice_without_client(tmp_path):
     events=tmp_path/'events.json'
     events.write_text('{"selection":"all"}')
     args=SimpleNamespace(video=video,config=Path(__file__).resolve().parents[1]/'config.example.yaml',
-        reselect=False,events=None,match_id=None,recording_start=None,time_offset=None,
+        champion="Aatrox",reselect=False,events=None,match_id=None,recording_start=None,time_offset=None,
         output=tmp_path/'out',client_dir=None,no_open=True)
     old={'source':source_key(video),'events_file':str(events),'offset':-106,'match_id':1}
     with patch('src.workflow.saved_job',return_value=old), \
@@ -115,7 +114,7 @@ def test_old_cache_refreshes_assists_without_reentering_alignment(tmp_path):
     events=tmp_path/'events.json'
     events.write_text('{"selection":"both"}')
     args=SimpleNamespace(video=video,config=Path(__file__).resolve().parents[1]/'config.example.yaml',
-        reselect=False,events=None,match_id=None,recording_start=None,time_offset=None,
+        champion="Aatrox",reselect=False,events=None,match_id=None,recording_start=None,time_offset=None,
         output=tmp_path/'out',client_dir=None,no_open=True)
     old={'source':source_key(video),'events_file':str(events),'offset':-106,'match_id':123}
     def get(endpoint):
@@ -144,3 +143,36 @@ def test_legacy_config_inherits_kill_window_for_assists():
     del config['event_windows']['assist']
     config['event_windows']['kill']={'pre':25,'post':7}
     assert validate(config)['event_windows']['assist']=={'pre':25,'post':7}
+
+
+def test_champion_alias_uses_english_id_on_japanese_client():
+    from src.workflow import match_champion, champion_slug
+    client=SimpleNamespace(get=lambda endpoint:[{'id':266,'name':'エイトロックス','alias':'Aatrox'}])
+    assert match_champion(client,{'participants':[{'participantId':2,'championId':266}]},2)=='Aatrox'
+    assert champion_slug('Miss Fortune')=='MissFortune'
+    with pytest.raises(ValueError):
+        champion_slug('../Aatrox')
+
+
+def test_failed_montage_leaves_no_partial_output(tmp_path):
+    video=tmp_path/'video.mp4'
+    video.write_bytes(b'test')
+    event_file=tmp_path/'events.json'
+    event_file.write_text(json.dumps({'schema':'lol-clipper-events-v1','selection':'all',
+        'events':[{'kind':'assist','game_time':50}]}))
+    root=tmp_path/'exports'
+    root.mkdir()
+    previous=root/'previous.mp4'
+    previous.write_bytes(b'keep')
+    def fail(exports,path,executable):
+        path.write_bytes(b'partial')
+        raise ValueError('encoding failed')
+    with patch('src.workflow.check_ffmpeg',return_value='ffmpeg'), \
+         patch('src.workflow.open_video',return_value=(SimpleNamespace(release=lambda:None),SimpleNamespace(duration=150))), \
+         patch('src.workflow.cut_clips',return_value=[]), \
+         patch('src.workflow.combine_clips',side_effect=fail):
+        with pytest.raises(ValueError,match='encoding failed'):
+            export_package(video,event_file,0,load_config(Path(__file__).resolve().parents[1]/'config.example.yaml'),
+                           root,'accurate',True,1,'Aatrox')
+    assert list(root.iterdir())==[previous]
+    assert previous.read_bytes()==b'keep'
