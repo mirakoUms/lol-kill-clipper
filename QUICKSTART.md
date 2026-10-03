@@ -20,18 +20,21 @@ Successful settings are remembered for the same unchanged video. To choose a dif
 .\.venv\Scripts\python.exe make_clips.py "my game.mp4" --reselect
 ```
 
-The terminal launcher, prompts, filenames, and CSV column labels currently use Chinese. Select a match using its numbered row; input formats are numeric and the same in any language.
+The terminal launcher and prompts currently use Chinese. Select a match using its numbered row; input formats are numeric and the same in any language.
 
 ## Files to use for publishing
 
-Each export creates a fresh folder under `exports`:
+Each run saves only the final MP4 directly under `exports`, for example:
 
-- Numbered MP4 files: every kill, death, and assist independently, ordered by event time. Import these into a video editor or select individual clips to upload.
-- `全部事件合集.mp4`: a ready-to-preview chronological montage. Overlapping or nearby event windows are merged to avoid repeated footage.
-- `片段清单.csv`: a UTF-8-with-BOM index for Excel with game event times, video boundaries, duration, and filenames.
-- `events.json` and `export.json`: data and export metadata for troubleshooting.
+```text
+2026-10-03_14-30-25_123456_Aatrox.mp4
+```
 
-Export retains audio and the original resolution/frame rate. It adds no watermarks, music, captions, or vertical crop, and does not upload anything automatically. Repeated exports receive numbered folders rather than replacing previous work.
+The filename contains the current export date, Japan time (UTC+9) including microseconds, and the champion's English alias. Kills, deaths, and assists appear in chronological order; overlapping or nearby windows merge to avoid repeated footage. Intermediate clips are cleaned up automatically. Diagnostics stay in `cache/export_logs`.
+
+The client supplies the English alias automatically. Older offline files may prompt once for the champion name; use `--champion Aatrox` to specify it without a prompt. The name is remembered with the recording settings.
+
+Export retains audio and the original resolution/frame rate. It adds no watermarks, music, captions, or vertical crop, and does not upload anything automatically. Earlier exports are preserved.
 
 ## Current clip windows
 

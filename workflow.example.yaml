@@ -2,5 +2,4 @@
 client_dir: 'C:\Riot Games\League of Legends'
 output_dir: exports
 cut_mode: accurate
-combine: true
 open_folder: true

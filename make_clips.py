@@ -8,12 +8,13 @@ def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8', errors='replace')
-    cli = argparse.ArgumentParser(description='一键导出全部击杀/死亡：选录像 → 选对局 → 填录制开始时的游戏时间')
+    cli = argparse.ArgumentParser(description='一键导出击杀/死亡/助攻合集：选录像 → 选对局 → 填录制开始时的游戏时间')
     cli.add_argument('video', nargs='?', type=Path, help='录像路径；也可拖到 start_clips.cmd，省略时弹出文件选择器')
     cli.add_argument('--match-id', type=int, help='已知的对局 ID，可跳过选择')
     cli.add_argument('--recording-start', help='录像第 0 秒对应的游戏时间，例如 01:46')
     cli.add_argument('--time-offset', type=float, help='高级：录像时间减游戏时间，可正可负；不能与 recording-start 同时用')
     cli.add_argument('--events', type=Path, help='离线使用已保存的 all 事件 JSON')
+    cli.add_argument('--champion', help='英雄英文名；通常自动读取，离线旧数据可手动指定')
     cli.add_argument('--client-dir', type=Path, help='覆盖 workflow.yaml 中的客户端路径')
     cli.add_argument('--output', type=Path, help='输出根目录')
     cli.add_argument('--reselect', action='store_true', help='重新选择对局和时间，不复用这段录像的设置')

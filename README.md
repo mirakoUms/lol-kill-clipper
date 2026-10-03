@@ -1,6 +1,6 @@
 # LoL Kill Clipper
 
-A small Windows-native tool that turns continuous League of Legends recordings into kill, death, and assist clips, plus a chronological montage. Python 3.11+, OpenCV, and FFmpeg; no OCR, deep-learning models, database, or cloud processing.
+A small Windows-native tool that turns continuous League of Legends recordings into a chronological montage of kills, deaths, and assists. Python 3.11+, OpenCV, and FFmpeg; no OCR, deep-learning models, database, or cloud processing.
 
 The recommended workflow reads match events from the logged-in League client. An optional template-matching workflow supports recordings when match data is unavailable.
 
@@ -32,24 +32,19 @@ Do not overwrite existing local configuration files when updating. Virtual-envir
 
 The application exports every kill/death/assist covered by the recording and opens the output folder. See [QUICKSTART.md](QUICKSTART.md) for everyday usage.
 
-The launcher currently uses Chinese prompts and output labels. This documentation is in English. Windows Unicode paths, including Chinese, Japanese, and spaces, are supported.
+The launcher currently uses Chinese prompts. This documentation is in English. Windows Unicode paths, including Chinese, Japanese, and spaces, are supported.
 
 ## Output
 
-Each export creates a new directory under `exports`; earlier exports are preserved.
+The everyday launcher exports only one final montage directly into `exports`:
 
 ```text
-exports/<recording>_<match>/
-  001_<kill>_<game-time>.mp4
-  002_<death>_<game-time>.mp4
-  <all-events-montage>.mp4
-  <clip-index>.csv
-  events.json
-  export.json
-  logs/
+exports/2026-10-03_14-30-25_123456_Aatrox.mp4
 ```
 
-Every event receives an independent clip, ordered by event time. The montage merges overlapping windows and windows separated by at most `merge_gap`, so the same fight is not replayed multiple times. Audio, source resolution, and source frame rate are retained. Outputs are local; nothing is automatically published to a video platform.
+The name uses the current export date and time in Japan (UTC+9), microseconds, and the champion's English alias. The alias is read from client data even on Japanese clients and remembered for later exports. For older offline data, provide `--champion Aatrox`, or enter the English name when prompted. Spaces and punctuation are removed from champion names (for example, `Miss Fortune` becomes `MissFortune`).
+
+Kills, deaths, and assists are ordered chronologically. Overlapping windows and windows separated by at most `merge_gap` are merged to avoid repeated footage. Intermediate clips are temporary and removed after success or failure. Diagnostic metadata stays in ignored `cache/export_logs`; the export directory receives only the final MP4. Previous exports remain intact. Audio, source resolution, and source frame rate are retained. Outputs are local; nothing is automatically published to a video platform.
 
 ## Clip timing
 
@@ -86,7 +81,7 @@ Successful match/time settings are remembered per video path, size, and modifica
 .\.venv\Scripts\python.exe auto_kill.py "my game.mp4" --events events.json --time-offset -106 --cut-mode accurate --combine
 ```
 
-`auto_kill.py` merges the event windows into clips; `make_clips.py` additionally preserves every individual event clip and produces a separate montage. Advanced results are written to `results.json` beside the input video. Their legacy `kills` array may include death events, distinguished by `kind`.
+`auto_kill.py` merges the event windows into clips; `make_clips.py` exports only the final montage. Advanced results are written to `results.json` beside the input video. Their legacy `kills` array may include death events, distinguished by `kind`.
 
 Local client endpoints are not a stable, officially supported third-party API. Availability varies by client version and match. A JP practice match was verified during development; this does not guarantee availability in every region. Akari is not required, and the tool does not automate its GUI. See [Riot's League Client API documentation](https://developer.riotgames.com/docs/lol#league-client-api).
 
@@ -125,7 +120,7 @@ Continuous matching hits form one event window; nearby windows merge under coold
 | `template.path`, `template.scales` | Template image and scale factors; path relative to the configuration |
 | `debug.max_images`, `debug.sample_images` | Per-scan screenshot limits |
 
-`workflow.yaml` controls the client path, output root, encoding mode, montage creation, and automatic folder opening. The wizard defaults to accurate H.264/AAC export with NVENC, falling back to libx264 on failure. Fast stream copy may start at a nearby keyframe. Same-name legacy CLI clips are replaced only after a new clip is successfully encoded; stale unrelated clips are not removed.
+`workflow.yaml` controls the client path, output root, encoding mode, and automatic folder opening. The wizard defaults to accurate H.264/AAC export with NVENC, falling back to libx264 on failure. Fast stream copy may start at a nearby keyframe. Same-name legacy CLI clips are replaced only after a new clip is successfully encoded; stale unrelated clips are not removed.
 
 ## Troubleshooting and boundaries
 
@@ -148,7 +143,7 @@ Template detection caches include video path/size/mtime, detector parameters, sc
 .\.venv\Scripts\python.exe -m compileall -q auto_kill.py calibrate.py fetch_events.py make_clips.py src
 ```
 
-Tests cover timing, ROI, configuration, event grouping, window merging, manual overrides, cache invalidation, Unicode paths, bounded screenshots, corrupted-file isolation, client event parsing, workflow choices, and separate clips versus montage ranges. See [VALIDATION.md](VALIDATION.md) for actual verification and remaining limitations.
+Tests cover timing, ROI, configuration, event grouping, window merging, manual overrides, cache invalidation, Unicode paths, bounded screenshots, corrupted-file isolation, client event parsing, workflow choices, and montage-only output, champion aliases, and merged ranges. See [VALIDATION.md](VALIDATION.md) for actual verification and remaining limitations.
 
 Source modules are small and separate detection, event import, video sampling, clipping, and the wizard. No model or GPU dependency is required for detection; the NVIDIA GPU is used only when available for encoding.
 

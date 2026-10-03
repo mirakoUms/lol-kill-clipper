@@ -4,13 +4,13 @@
 
 Verified on Windows using Python 3.12 in the project virtual environment:
 
-- `python -m pytest -q`: **61 passed** at the workflow release checkpoint.
+- `python -m pytest -q`: **63 passed** at the workflow release checkpoint.
 - Compilation and imports for the CLI entry points and source modules.
 - Help output for the template, calibration, event-fetch, and everyday-export CLIs.
 - Configuration parsing and readable missing-template / missing-FFmpeg behavior.
 - Random-texture synthetic video detection, peak grouping, bounded screenshots, Unicode paths, cache reuse/invalidation, and corrupt-video batch isolation.
 - Separate kill/death windows, manual boundaries, interval merging, event parsing, offset handling, player identification, and loopback-only request construction.
-- Wizard choices, remembered settings, preservation of previous exports, every-event independent output, and merged montage ranges.
+- Wizard choices, remembered settings, preservation of previous exports, montage-only output, and merged montage ranges.
 
 Synthetic textures and mocked subprocess outputs are unit-test fixtures, not evidence of real LoL recognition accuracy.
 
@@ -39,4 +39,6 @@ Personal recordings, actual match IDs, event exports, generated clips, and local
 
 Repeat tests with `requirements-dev.txt`; see README for setup. Keep verification claims tied to these checks rather than assuming universal match-data or recognition support.
 
-Assist regression checks cover participant IDs, role precedence, offline import, chronological independent exports, merged montage ranges, legacy window defaults, and automatic upgrade of old caches.
+Assist regression checks cover participant IDs, role precedence, offline import, chronological merged exports, merged montage ranges, legacy window defaults, and automatic upgrade of old caches.
+
+Montage-only exports verify temporary clip cleanup, a single MP4 in the export directory, Japanese-client English aliases, and retention of metadata in the cache. Earlier integration outputs above describe the previous individual-clip workflow.
