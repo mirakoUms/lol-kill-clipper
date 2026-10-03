@@ -92,3 +92,22 @@ def test_import_pipeline_without_template(tmp_path):
     data = json.loads((tmp_path/'results.json').read_text(encoding='utf-8'))
     assert data[video.name]['kills'][0]['time'] == pytest.approx(155.192)
     assert data[video.name]['planned_clips'][0]['start'] == pytest.approx(140.192)
+
+
+def test_assists_selection_precedence_and_import(tmp_path):
+    data = {'frames': [{'events': [
+        {'type': 'CHAMPION_KILL', 'killerId': 4, 'victimId': 5,
+         'assistingParticipantIds': [2, 6], 'timestamp': 100000},
+        {'type': 'CHAMPION_KILL', 'killerId': 2, 'victimId': 5,
+         'assistingParticipantIds': [2], 'timestamp': 200000},
+        {'type': 'CHAMPION_KILL', 'killerId': 4, 'victimId': 2,
+         'assistingParticipantIds': [2], 'timestamp': 300000},
+        {'type': 'WARD_KILL', 'killerId': 4, 'assistingParticipantIds': [2], 'timestamp': 400000},
+        {'type': 'CHAMPION_KILL', 'killerId': 4, 'victimId': 5, 'timestamp': 500000}]}]}
+    assert [e['kind'] for e in extract_events(data, 2, 'all')] == ['assist', 'kill', 'death']
+    assert len(extract_events(data, 2, 'both')) == 2
+    assists = extract_events(data, 2, 'assist')
+    assert len(assists) == 1 and assists[0]['game_time'] == 100
+    path = tmp_path/'assists.json'
+    path.write_text(json.dumps({'schema': 'lol-clipper-events-v1', 'events': assists}))
+    assert import_events(path, -20, 400)[0]['time'] == 80

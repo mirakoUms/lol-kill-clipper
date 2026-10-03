@@ -26,7 +26,7 @@ def test_saved_job_invalidates_source(tmp_path):
     video=tmp_path/'录像.mp4'
     video.write_bytes(b'test')
     events=tmp_path/'events.json'
-    events.write_text('{}')
+    events.write_text('{"selection":"all"}')
     job=tmp_path/'job.json'
     job.write_text(json.dumps({'source':source_key(video),'events_file':str(events),'offset':-106,'match_id':1}))
     assert saved_job(job,source_key(video)) is not None
@@ -50,8 +50,8 @@ def test_package_keeps_all_individual_events_and_merges_montage(tmp_path):
     video=tmp_path/'录像 空格.mp4'
     video.write_bytes(b'unit test placeholder')
     event_file=tmp_path/'input.json'
-    event_file.write_text(json.dumps({'schema':'lol-clipper-events-v1','match_id':1,'selection':'both','events':[
-        {'kind':'kill','game_time':50},{'kind':'death','game_time':60},{'kind':'kill','game_time':200}]}))
+    event_file.write_text(json.dumps({'schema':'lol-clipper-events-v1','match_id':1,'selection':'all','events':[
+        {'kind':'kill','game_time':50},{'kind':'assist','game_time':60},{'kind':'kill','game_time':200}]}))
     config=load_config(Path(__file__).resolve().parents[1]/'config.example.yaml')
     calls=[]
     def fake_cut(video,output,clips,mode,executable,names=None):
@@ -72,6 +72,8 @@ def test_package_keeps_all_individual_events_and_merges_montage(tmp_path):
         output=export_package(video,event_file,0,config,tmp_path/'exports','accurate',True,1)
     manifest=json.loads((output/'export.json').read_text(encoding='utf-8'))
     assert len(manifest['clips'])==2
+    assert '助攻' in manifest['clips'][1]['path']
+    assert manifest['clips'][1]['start']==45
     assert len(manifest['skipped_events'])==1
     assert len(calls[0])==2 and len(calls[1])==1
     assert len(manifest['montage_ranges'])==1
@@ -84,7 +86,7 @@ def test_wizard_reuses_successful_choice_without_client(tmp_path):
     video=tmp_path/'video.mp4'
     video.write_bytes(b'test')
     events=tmp_path/'events.json'
-    events.write_text('{}')
+    events.write_text('{"selection":"all"}')
     args=SimpleNamespace(video=video,config=Path(__file__).resolve().parents[1]/'config.example.yaml',
         reselect=False,events=None,match_id=None,recording_start=None,time_offset=None,
         output=tmp_path/'out',client_dir=None,no_open=True)
@@ -105,3 +107,40 @@ def test_match_selector_validates_index():
             'gameDuration':212,'gameMode':'PRACTICETOOL','participants':[{'championId':266,'stats':{'kills':1,'deaths':1,'assists':0}}]}]}}
     with patch('builtins.input',side_effect=['0','1']):
         assert choose_match(SimpleNamespace(get=get),{'puuid':'test'})==123
+
+
+def test_old_cache_refreshes_assists_without_reentering_alignment(tmp_path):
+    video=tmp_path/'video.mp4'
+    video.write_bytes(b'test')
+    events=tmp_path/'events.json'
+    events.write_text('{"selection":"both"}')
+    args=SimpleNamespace(video=video,config=Path(__file__).resolve().parents[1]/'config.example.yaml',
+        reselect=False,events=None,match_id=None,recording_start=None,time_offset=None,
+        output=tmp_path/'out',client_dir=None,no_open=True)
+    old={'source':source_key(video),'events_file':str(events),'offset':-106,'match_id':123}
+    def get(endpoint):
+        if 'current-summoner' in endpoint:
+            return {'puuid':'self'}
+        if 'game-timelines' in endpoint:
+            return {'frames':[{'events':[{'type':'CHAMPION_KILL','killerId':4,'victimId':5,
+                'assistingParticipantIds':[2],'timestamp':135000}]}]}
+        return {'participantIdentities':[{'participantId':2,'player':{'puuid':'self'}}]}
+    with patch('src.workflow.saved_job',return_value=old), \
+         patch('src.workflow.find_lockfile',return_value=tmp_path/'lockfile'), \
+         patch('src.workflow.Client',return_value=SimpleNamespace(get=get)), \
+         patch('src.workflow.choose_match',side_effect=AssertionError('Must reuse match')), \
+         patch('builtins.input',side_effect=AssertionError('Must reuse alignment')), \
+         patch('src.workflow.export_package',return_value=tmp_path/'out') as export, \
+         patch('src.workflow.write_json') as write:
+        assert run_workflow(args)==0
+        assert export.call_args.args[2]==-106
+        data=write.call_args_list[0].args[1]
+        assert data['selection']=='all' and data['events'][0]['kind']=='assist'
+
+
+def test_legacy_config_inherits_kill_window_for_assists():
+    from src.config import validate
+    config=load_config(Path(__file__).resolve().parents[1]/'config.example.yaml')
+    del config['event_windows']['assist']
+    config['event_windows']['kill']={'pre':25,'post':7}
+    assert validate(config)['event_windows']['assist']=={'pre':25,'post':7}
