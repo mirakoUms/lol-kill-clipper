@@ -1,0 +1,2 @@
+# Optional portable FFmpeg binary; system FFmpeg works without this package.
+imageio-ffmpeg>=0.6,<0.7

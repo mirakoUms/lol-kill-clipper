@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+clips/
+debug/
+cache/
+logs/
+results.json
+templates/kill_template.png
+events.json
+exports/
+# Recordings, local credentials, and personal match/configuration data.
+*.mp4
+*.mkv
+*.mov
+*.avi
+events*.json
+event_overrides.yaml
+config.yaml
+workflow.yaml
+lockfile
+.env
+.env.*

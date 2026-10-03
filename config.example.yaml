@@ -1,0 +1,27 @@
+scan_interval: 0.25
+match_threshold: 0.82
+kill_cooldown: 5.0
+pre_kill_seconds: 8.0
+post_kill_seconds: 5.0
+event_windows:
+  kill:
+    pre: 15.0
+    post: 5.0
+  death:
+    pre: 40.0
+    post: 5.0
+merge_gap: 8.0
+cut_mode: fast
+video_extensions: [.mp4, .mkv, .mov]
+# Initial placeholder only. Calibrate before using template detection.
+roi:
+  x1: 0.70
+  y1: 0.00
+  x2: 1.00
+  y2: 0.30
+template:
+  path: templates/kill_template.png
+  scales: [1.0]
+debug:
+  max_images: 30
+  sample_images: 5
