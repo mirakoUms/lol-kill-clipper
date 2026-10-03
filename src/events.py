@@ -6,8 +6,8 @@ from src.utils import timestamp
 
 
 def extract_events(timeline: dict, participant_id: int, kind: str = 'kill') -> list[dict]:
-    if kind not in ('kill', 'death', 'both'):
-        raise ValueError('Event kind must be kill, death or both')
+    if kind not in ('kill', 'death', 'assist', 'both', 'all'):
+        raise ValueError('Event kind must be kill, death, assist, both or all')
     if not isinstance(participant_id, int) or isinstance(participant_id, bool) or participant_id <= 0:
         raise ValueError('participant_id must be a positive integer')
     body = timeline.get('info', timeline)
@@ -20,8 +20,9 @@ def extract_events(timeline: dict, participant_id: int, kind: str = 'kill') -> l
             if event.get('type', event.get('eventType')) != 'CHAMPION_KILL':
                 continue
             role = 'kill' if event.get('killerId') == participant_id else (
-                'death' if event.get('victimId') == participant_id else None)
-            if role is None or (kind != 'both' and role != kind):
+                'death' if event.get('victimId') == participant_id else (
+                    'assist' if participant_id in (event.get('assistingParticipantIds') or []) else None))
+            if role is None or (kind == 'both' and role == 'assist') or (kind not in ('both', 'all') and role != kind):
                 continue
             raw = event.get('timestamp')
             if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(raw) or raw < 0:
@@ -40,7 +41,7 @@ def import_events(path: Path, offset: float, duration: float) -> list[dict]:
         raise ValueError('Unsupported events file; use fetch_events.py to create it')
     result = []
     for item in data['events']:
-        if not isinstance(item, dict) or item.get('kind') not in ('kill', 'death'):
+        if not isinstance(item, dict) or item.get('kind') not in ('kill', 'death', 'assist'):
             raise ValueError('Invalid event entry')
         seconds = item.get('game_time')
         if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or seconds < 0:

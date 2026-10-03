@@ -18,7 +18,7 @@ from src.utils import setup_logging, timestamp, write_json
 from src.video import open_video
 
 PROJECT = Path(__file__).resolve().parents[1]
-LABELS = {'kill': '击杀', 'death': '死亡'}
+LABELS = {'kill': '击杀', 'death': '死亡', 'assist': '助攻'}
 
 
 def choose_video() -> Path:
@@ -153,7 +153,7 @@ def unique_output(root: Path, name: str) -> Path:
 
 def clip_name(index: int, clip: dict, events: list[dict]) -> str:
     kinds = [events[i]['kind'] for i in clip['event_indices']]
-    label = '_'.join(f'{LABELS[kind]}{kinds.count(kind)}' for kind in ('kill','death') if kind in kinds)
+    label = '_'.join(f'{LABELS[kind]}{kinds.count(kind)}' for kind in ('kill','death','assist') if kind in kinds)
     first = events[clip['event_indices'][0]]
     game_time = timestamp(first['game_time']).replace(':','-')
     return f'{index:03}_{label}_{game_time}.mp4'
@@ -167,8 +167,8 @@ def export_package(video: Path, event_file: Path, offset: float, config: dict,
     # Events before/after this recording are expected for a partial recording.
     # Filter them explicitly and report counts; never silently omit them.
     data = json.loads(event_file.read_text(encoding='utf-8-sig'))
-    if data.get('selection') != 'both':
-        raise ValueError('一键导出需要全部击杀/死亡数据（selection: both）；请重新读取 --kind both')
+    if data.get('selection') != 'all':
+        raise ValueError('一键导出需要全部击杀/死亡/助攻数据（selection: all）；请重新读取 --kind all')
     selected, outside = [], 0
     for item in data.get('events', []):
         value = item.get('game_time')
@@ -181,7 +181,7 @@ def export_package(video: Path, event_file: Path, offset: float, config: dict,
     if outside:
         print(f'有 {outside} 个事件发生在录像覆盖范围之外，无法剪出，已列入清单。请核对录制开始时间。')
     if not selected:
-        raise ValueError('录像时间范围内没有击杀/死亡事件，请检查对局和录制起始时间')
+        raise ValueError('录像时间范围内没有击杀/死亡/助攻事件，请检查对局和录制起始时间')
     output = unique_output(root, f'{video.stem}_对局{match_id or "offline"}')
     setup_logging(output/'logs')
     selected_file = output/'events.json'
@@ -194,7 +194,7 @@ def export_package(video: Path, event_file: Path, offset: float, config: dict,
         clip['event_indices'] = [index]
         clips.append(clip)
     names = [clip_name(i,clip,events) for i,clip in enumerate(clips,1)]
-    print(f'\n录像内共 {sum(e["kind"]=="kill" for e in events)} 次击杀、{sum(e["kind"]=="death" for e in events)} 次死亡。')
+    print(f'\n录像内共 {sum(e["kind"]=="kill" for e in events)} 次击杀、{sum(e["kind"]=="death" for e in events)} 次死亡、{sum(e["kind"]=="assist" for e in events)} 次助攻。')
     print(f'开始导出全部 {len(clips)} 个独立切片…')
     exports = cut_clips(video,output,clips,mode,executable,names=names)
     merged = merge_clips(events,info.duration,config['pre_kill_seconds'],config['post_kill_seconds'],
@@ -244,6 +244,12 @@ def run_workflow(args) -> int:
     old = None if args.reselect else saved_job(job_file,key)
     explicit = any(value is not None for value in (args.events,args.match_id,args.recording_start,args.time_offset))
     if old and not explicit:
+        cached = json.loads(Path(old['events_file']).read_text(encoding='utf-8-sig'))
+        if cached.get('selection') != 'all':
+            print('旧事件缓存未包含助攻，使用已保存的对局和时间重新读取客户端。')
+            args.match_id, args.time_offset = old.get('match_id'), old['offset']
+            old = None
+    if old and not explicit:
         print('已找到这段录像之前的对局和时间设置，直接重新导出。要重新选择请加 --reselect。')
         event_file,offset,match_id = Path(old['events_file']),old['offset'],old.get('match_id')
     else:
@@ -263,10 +269,10 @@ def run_workflow(args) -> int:
             detail = client.get(f'/lol-match-history/v1/games/{match_id}')
             participant = own_participant(detail,summoner)
             timeline = client.get(f'/lol-match-history/v1/game-timelines/{match_id}')
-            events = extract_events(timeline,participant,'both')
+            events = extract_events(timeline,participant,'all')
             event_file = PROJECT/'cache'/'workflow'/f'{digest}_{match_id}_events.json'
             write_json(event_file,{'schema':'lol-clipper-events-v1','match_id':match_id,
-                                  'participant_id':participant,'selection':'both','events':events})
+                                  'participant_id':participant,'selection':'all','events':events})
         offset = recording_offset(args)
     root = args.output.resolve() if args.output else (PROJECT/settings['output_dir']).resolve()
     output = export_package(video,event_file,offset,config,root,settings['cut_mode'],settings['combine'],match_id)

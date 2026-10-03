@@ -22,8 +22,9 @@ def validate(config: dict) -> dict:
     if config['pre_kill_seconds'] + config['post_kill_seconds'] <= 0:
         raise ValueError('Clip duration must be greater than zero')
     windows = config.setdefault('event_windows', {})
-    if not isinstance(windows, dict) or any(key not in ('kill', 'death') for key in windows):
-        raise ValueError('event_windows may contain only kill and death')
+    if not isinstance(windows, dict) or any(key not in ('kill', 'death', 'assist') for key in windows):
+        raise ValueError('event_windows may contain only kill, death and assist')
+    windows.setdefault('assist', dict(windows.get('kill', {'pre': config['pre_kill_seconds'], 'post': config['post_kill_seconds']})))
     for kind, window in windows.items():
         if not isinstance(window, dict) or set(window) != {'pre', 'post'}:
             raise ValueError(f'event_windows.{kind} requires pre and post')
