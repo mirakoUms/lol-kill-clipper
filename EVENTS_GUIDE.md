@@ -17,17 +17,17 @@ Choose the match corresponding to your recording using its date, duration, mode,
 Replace `123456789` with the actual game ID:
 
 ```powershell
-.\.venv\Scripts\python.exe fetch_events.py --client-dir "C:\Riot Games\League of Legends" --match-id 123456789 --kind both --output events.json
+.\.venv\Scripts\python.exe fetch_events.py --client-dir "C:\Riot Games\League of Legends" --match-id 123456789 --kind all --output events.json
 ```
 
-The standalone exporter defaults to `--kind kill`. Use `death` for deaths or `both` for the complete publishing workflow. The logged-in player is identified by PUUID or summoner ID, then events are selected using their killer/victim participant IDs. Explicit `--participant-id` is available for known player slots; do not guess a slot.
+The standalone exporter defaults to `--kind kill`. Use `death` for deaths, `assist` for assists, `both` for kills/deaths only, or `all` for the complete publishing workflow. Assists are selected from `assistingParticipantIds`; kills/deaths take precedence to avoid duplicate roles. The logged-in player is identified by PUUID or summoner ID, then events are selected using their killer/victim participant IDs. Explicit `--participant-id` is available for known player slots; do not guess a slot.
 
 ```json
 {
   "schema": "lol-clipper-events-v1",
   "match_id": 123456789,
   "participant_id": 1,
-  "selection": "both",
+  "selection": "all",
   "events": [
     {"game_time": 135.192, "kind": "kill", "killer_id": 1, "victim_id": 2}
   ]
@@ -51,7 +51,7 @@ Check at least one event near the beginning and one near the end of a continuous
 
 This mode does not load templates, run cooldown grouping, or use the detector cache. `confidence` is `null`, because events are not template estimates. The advanced CLI rejects events outside the video; the everyday wizard explicitly filters and reports uncovered events in partial recordings.
 
-The advanced CLI's legacy JSON field is named `kills` even when deaths are included; inspect each event's `kind`. Legacy clip names use `kill_...`; the everyday wizard creates descriptive kill/death labels instead.
+The advanced CLI's legacy JSON field is named `kills` even when deaths are included; inspect each event's `kind`. Legacy clip names use `kill_...`; the everyday wizard creates descriptive kill/death/assist labels instead.
 
 ## Optional manual start/end
 
@@ -78,6 +78,8 @@ The client must remain open and logged in while fetching data. A missing lockfil
 
 Authentication is read from the client's temporary lockfile and retained in process memory. GET requests are confined to literal `127.0.0.1`; proxies and redirects are disabled. The local self-signed certificate is accepted only for this connection. Do not publish lockfile contents or client credentials.
 
-Historical timeline data inspected during development had roughly one-minute position snapshots and precise kill/death timestamps, without continuous health or per-hit damage timestamps. The tool therefore uses configurable fixed windows, not automatic combat-start inference.
+Historical timeline data inspected during development had roughly one-minute position snapshots and precise kill/death/assist timestamps, without continuous health or per-hit damage timestamps. The tool therefore uses configurable fixed windows, not automatic combat-start inference.
 
 See [Riot's local client API documentation](https://developer.riotgames.com/docs/lol#league-client-api) and [VALIDATION.md](VALIDATION.md).
+
+Assists use a 15-second lead-in and 5-second follow-up by default. Existing configurations without an assist window inherit the kill window. Old wizard caches are refreshed from the client using the saved match and time alignment; old offline files must be re-exported with `--kind all`.

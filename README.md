@@ -1,6 +1,6 @@
 # LoL Kill Clipper
 
-A small Windows-native tool that turns continuous League of Legends recordings into kill and death clips, plus a chronological montage. Python 3.11+, OpenCV, and FFmpeg; no OCR, deep-learning models, database, or cloud processing.
+A small Windows-native tool that turns continuous League of Legends recordings into kill, death, and assist clips, plus a chronological montage. Python 3.11+, OpenCV, and FFmpeg; no OCR, deep-learning models, database, or cloud processing.
 
 The recommended workflow reads match events from the logged-in League client. An optional template-matching workflow supports recordings when match data is unavailable.
 
@@ -30,7 +30,7 @@ Do not overwrite existing local configuration files when updating. Virtual-envir
 6. Open the League client and log in.
 7. Double-click **start_clips.cmd**, or drag a recording onto it. Select the matching game and enter the game clock shown at the beginning of the recording, such as `01:46`.
 
-The application exports every kill/death covered by the recording and opens the output folder. See [QUICKSTART.md](QUICKSTART.md) for everyday usage.
+The application exports every kill/death/assist covered by the recording and opens the output folder. See [QUICKSTART.md](QUICKSTART.md) for everyday usage.
 
 The launcher currently uses Chinese prompts and output labels. This documentation is in English. Windows Unicode paths, including Chinese, Japanese, and spaces, are supported.
 
@@ -58,6 +58,7 @@ Current defaults are deliberately simple:
 | Event | Before | After |
 |---|---:|---:|
 | Kill | 15 seconds | 5 seconds |
+| Assist | 15 seconds | 5 seconds |
 | Death | 40 seconds | 5 seconds |
 
 Adjust `event_windows` in `config.yaml` without changing Python. This version does **not** automatically identify combat starts. A long chase can exceed any fixed window. Optional manual boundaries are available through the advanced CLI; see [EVENTS_GUIDE.md](EVENTS_GUIDE.md).
@@ -74,13 +75,13 @@ For continuous recordings, **video time = game time + offset**. If recording sta
 .\.venv\Scripts\python.exe make_clips.py --help
 ```
 
-Successful match/time settings are remembered per video path, size, and modification time. Re-exporting the same unchanged file can use saved event data without reconnecting to the client. `--reselect` clears this choice for the next export. Offline files must contain both event types (`selection: both`). Events outside a partial recording are reported and listed in the manifest.
+Successful match/time settings are remembered per video path, size, and modification time. Re-exporting the same unchanged file can use saved event data without reconnecting to the client. `--reselect` clears this choice for the next export. Offline files must contain all three event types (`selection: all`). Events outside a partial recording are reported and listed in the manifest.
 
 ## Advanced event workflow
 
 ```powershell
 .\.venv\Scripts\python.exe fetch_events.py --client-dir "C:\Riot Games\League of Legends" --list
-.\.venv\Scripts\python.exe fetch_events.py --client-dir "C:\Riot Games\League of Legends" --match-id 123456789 --kind both --output events.json
+.\.venv\Scripts\python.exe fetch_events.py --client-dir "C:\Riot Games\League of Legends" --match-id 123456789 --kind all --output events.json
 .\.venv\Scripts\python.exe auto_kill.py "my game.mp4" --events events.json --time-offset -106 --detect-only
 .\.venv\Scripts\python.exe auto_kill.py "my game.mp4" --events events.json --time-offset -106 --cut-mode accurate --combine
 ```
@@ -116,7 +117,7 @@ Continuous matching hits form one event window; nearby windows merge under coold
 | `match_threshold` | Correlation threshold, 0–1; tune on your recordings |
 | `kill_cooldown` | Group nearby template hit windows |
 | `pre_kill_seconds`, `post_kill_seconds` | Fallback window for event types without a specific setting |
-| `event_windows` | Independent `pre` / `post` seconds for `kill` and `death` |
+| `event_windows` | Independent `pre` / `post` seconds for `kill`, `death`, and `assist` |
 | `merge_gap` | Maximum gap between windows merged in a montage |
 | `cut_mode` | `fast` stream copy or `accurate` re-encoding |
 | `video_extensions` | Supported top-level video extensions |
@@ -152,3 +153,5 @@ Tests cover timing, ROI, configuration, event grouping, window merging, manual o
 Source modules are small and separate detection, event import, video sampling, clipping, and the wizard. No model or GPU dependency is required for detection; the NVIDIA GPU is used only when available for encoding.
 
 LoL Kill Clipper is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+
+Assists use a 15-second lead-in and 5-second follow-up by default. Existing configurations without an assist window inherit the kill window. Old wizard caches are refreshed from the client using the saved match and time alignment; old offline files must be re-exported with `--kind all`.

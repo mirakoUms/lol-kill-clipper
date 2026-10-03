@@ -13,7 +13,7 @@ def main() -> int:
     cli.add_argument('--match-id', type=int, help='已知的对局 ID，可跳过选择')
     cli.add_argument('--recording-start', help='录像第 0 秒对应的游戏时间，例如 01:46')
     cli.add_argument('--time-offset', type=float, help='高级：录像时间减游戏时间，可正可负；不能与 recording-start 同时用')
-    cli.add_argument('--events', type=Path, help='离线使用已保存的 both 事件 JSON')
+    cli.add_argument('--events', type=Path, help='离线使用已保存的 all 事件 JSON')
     cli.add_argument('--client-dir', type=Path, help='覆盖 workflow.yaml 中的客户端路径')
     cli.add_argument('--output', type=Path, help='输出根目录')
     cli.add_argument('--reselect', action='store_true', help='重新选择对局和时间，不复用这段录像的设置')

@@ -26,7 +26,7 @@ The terminal launcher, prompts, filenames, and CSV column labels currently use C
 
 Each export creates a fresh folder under `exports`:
 
-- Numbered MP4 files: every kill and death independently, ordered by event time. Import these into a video editor or select individual clips to upload.
+- Numbered MP4 files: every kill, death, and assist independently, ordered by event time. Import these into a video editor or select individual clips to upload.
 - `全部事件合集.mp4`: a ready-to-preview chronological montage. Overlapping or nearby event windows are merged to avoid repeated footage.
 - `片段清单.csv`: a UTF-8-with-BOM index for Excel with game event times, video boundaries, duration, and filenames.
 - `events.json` and `export.json`: data and export metadata for troubleshooting.
@@ -47,7 +47,7 @@ This assumes one continuous recording of one match. Multiple matches or interrup
 
 ## Offline or scripted export
 
-Export both event types first, following [EVENTS_GUIDE.md](EVENTS_GUIDE.md), then:
+Export all three event types first, following [EVENTS_GUIDE.md](EVENTS_GUIDE.md), then:
 
 ```powershell
 .\.venv\Scripts\python.exe make_clips.py "my game.mp4" --events events.json --recording-start 01:46
@@ -60,3 +60,5 @@ Once successful, re-export using only the video path:
 ```
 
 The file chooser requires Tk support. If unavailable, use drag-and-drop or a quoted path. If the client is still loading, wait for its home screen before retrying.
+
+Assists use a 15-second lead-in and 5-second follow-up by default. Existing configurations without an assist window inherit the kill window. Old wizard caches are refreshed from the client using the saved match and time alignment; old offline files must be re-exported with `--kind all`.

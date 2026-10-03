@@ -1,4 +1,4 @@
-"""List recent matches / export exact kill or death events from local client."""
+"""List recent matches / export exact kill, death or assist events from local client."""
 import argparse
 from pathlib import Path
 from urllib.parse import quote
@@ -13,7 +13,7 @@ def main() -> int:
     cli.add_argument('--list', action='store_true', help='List recent matches (default if no match selected)')
     cli.add_argument('--match-id', type=int, help='Match gameId from the list')
     cli.add_argument('--participant-id', type=int, help='Override player slot; normally detected automatically')
-    cli.add_argument('--kind', choices=['kill', 'death', 'both'], default='kill')
+    cli.add_argument('--kind', choices=['kill', 'death', 'assist', 'both', 'all'], default='kill')
     cli.add_argument('--output', type=Path, default=Path('events.json'))
     args = cli.parse_args()
     try:

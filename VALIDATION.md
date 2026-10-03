@@ -4,7 +4,7 @@
 
 Verified on Windows using Python 3.12 in the project virtual environment:
 
-- `python -m pytest -q`: **58 passed** at the workflow release checkpoint.
+- `python -m pytest -q`: **61 passed** at the workflow release checkpoint.
 - Compilation and imports for the CLI entry points and source modules.
 - Help output for the template, calibration, event-fetch, and everyday-export CLIs.
 - Configuration parsing and readable missing-template / missing-FFmpeg behavior.
@@ -38,3 +38,5 @@ Personal recordings, actual match IDs, event exports, generated clips, and local
 - Combat-start inference, automatic chase segmentation, captions, vertical reframing, and publishing to video platforms are not implemented.
 
 Repeat tests with `requirements-dev.txt`; see README for setup. Keep verification claims tied to these checks rather than assuming universal match-data or recognition support.
+
+Assist regression checks cover participant IDs, role precedence, offline import, chronological independent exports, merged montage ranges, legacy window defaults, and automatic upgrade of old caches.

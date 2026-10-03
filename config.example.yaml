@@ -7,6 +7,9 @@ event_windows:
   kill:
     pre: 15.0
     post: 5.0
+  assist:
+    pre: 15.0
+    post: 5.0
   death:
     pre: 40.0
     post: 5.0
